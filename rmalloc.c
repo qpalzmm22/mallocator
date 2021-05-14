@@ -9,7 +9,9 @@ rm_header rm_used_list = { 0x0, 0 } ;
 
 rm_option g_opt = FirstFit;
 
-static int* pg_free = 0x0;
+int* pg_free = 0x0;
+int* p_free = 0x0;
+int* p_used = 0x0;
 
 /* 
  * USE mmap to allocate memory by page
@@ -21,13 +23,9 @@ static int* pg_free = 0x0;
 
 rm_header* create_node(void * v_addr, size_t s){
 	printf("Creating node at %p with size %ld\n", v_addr, s);
-	printf("HI\n");
 	rm_header * newfree = (rm_header *)v_addr;
-	printf("1B");
 	newfree->size = s;
-	printf("1C");
 	newfree->next = 0x0;
-	printf("1D");
 
 	return newfree;
 }
