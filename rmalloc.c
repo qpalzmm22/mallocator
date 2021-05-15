@@ -12,6 +12,8 @@ rm_header_ptr p_last_used_node = &rm_used_list;	// points to last node on the us
 
 
 
+void insert_node(rm_header_ptr new_node, rm_header node_list);
+
 // v_addr->next = null, v_addr->size = s
 // returns the ptr of the v_addr. 
 rm_header_ptr create_node(void * v_addr, size_t s){
@@ -42,6 +44,7 @@ sm_container_split (rm_header_ptr prev_hole, size_t size)
 	// (free list)
 	remainder->size = hole->size - size - sizeof(rm_header) ;
 	remainder->next = hole->next ;
+	prev_hole->next = remainder;
 
 	// (used list)
 	hole->next = rm_used_list.next;
@@ -59,12 +62,14 @@ retain_more_memory (size_t size)
 
 	n_pages = (sizeof(rm_header) + size ) / pagesize  + 1 ;
 	hole = (rm_header_ptr) mmap(0x0, n_pages *n_pages, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+
+	printf("pagesize : %ld\n", pagesize);
 	
 	if (hole == 0x0)
 		return 0x0 ;
 	
 	hole->size = n_pages * pagesize - sizeof(rm_header) ;
-
+	printf("pagesize : %ld\n", hole->size);
 	return hole ;
 }
 
@@ -90,8 +95,11 @@ rmalloc (size_t size)
 		if (hole == 0x0)
 			return 0x0 ;
 		
-		hole->next = rm_free_list.next ;
+		hole->next = rm_free_list.next;
 		rm_free_list.next = hole;
+
+		prev_hole = &rm_free_list;
+
 	}
 	//if hole is found
 	if (size < hole->size)
@@ -100,9 +108,24 @@ rmalloc (size_t size)
 	return _data(hole) ;
 }
 
+void insert_node(rm_header_ptr newNode, rm_header node_list){
+	newNode->next = node_list.next;
+	node_list.next = newNode;
+}
+
+void delete_node(){}
 void rfree (void * p) 
 {
 	// TODO 
+	rm_header_ptr itr ;
+	for (itr = rm_used_list.next ; itr != 0x0 ; itr = itr->next) {
+		if (p == _data(itr)) {
+
+			// insert front at free list
+			//insert_node(itr, rm_free_list);
+			break ;
+		}
+	}
 }
 
 
@@ -110,6 +133,7 @@ void rfree (void * p)
 void * rrealloc (void * p, size_t s) 
 {
 	void * p_orig; 
+
 	// iterate and find p in used_list
 	for(rm_header_ptr u_iter = rm_used_list.next ; u_iter != 0x0 ; u_iter = u_iter->next){
 		
@@ -149,17 +173,6 @@ void rmconfig (rm_option opt)
 {
 	// TODO
 }
-
-// int main(){
-// 	//dont use this one
-// 	rmalloc(10);
-// 	rmprint();
-// 	rmalloc(100);
-// 	rmprint();
-// 	rmalloc(2000);
-// 	rmprint();
-// }
-
 
 void 
 rmprint () 
