@@ -113,18 +113,29 @@ void insert_node(rm_header_ptr newNode, rm_header node_list){
 	node_list.next = newNode;
 }
 
-void delete_node(){}
+// Needs to pass previous node.
+void delete_node(rm_header_ptr prev_node){
+	rm_header_ptr curNode = prev_node->next;
+	prev_node->next = curNode->next;
+}
+
 void rfree (void * p) 
 {
 	// TODO 
 	rm_header_ptr itr ;
+	rm_header_ptr prev_node = &rm_used_list;
 	for (itr = rm_used_list.next ; itr != 0x0 ; itr = itr->next) {
 		if (p == _data(itr)) {
 
-			// insert front at free list
-			//insert_node(itr, rm_free_list);
+			// insert front at free_list
+			insert_node(_data(itr), rm_free_list);
+
+			// remove from used_list
+			delete_node(prev_node);
+			
 			break ;
 		}
+		prev_node = itr;
 	}
 }
 
