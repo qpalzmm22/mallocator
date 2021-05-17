@@ -221,7 +221,9 @@ int main(void) {
 	print_list(list);
 	printf("string at node with key %d = '%s' \n",2,get_string(list, 2));
 	free_list(list);
-
+	rmprint();
+	rmshrink();
+	rmprint();
 	return OK;
 }
 
