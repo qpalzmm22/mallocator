@@ -12,81 +12,80 @@ rm_header_ptr p_prev_free_node = &rm_free_list; // points to last node on the fr
 rm_header_ptr p_last_used_node = &rm_used_list;	// points to last node on the used_list
 
 
-
-
-
-static void * page_boundary;
+static void * page_max_bound;
+static void * page_min_bound;
 
 typedef struct{
 	rm_header_ptr heap[MAX_HEAP_SIZE];
 	size_t heap_size;
 } HeapHeader;
-HeapHeader free_h;
+
+HeapHeader free_h, used_h;
 HeapHeader *free_heap = &free_h;
+HeapHeader *used_heap = &used_h;
 
 
-
-void print_heap(){
+void print_heap(HeapHeader * heap){
 	int i = 1;
-	while(i <= free_heap->heap_size){
-		printf("%p with size %ld\n", free_heap->heap[i], free_heap->heap[i]->size);
+	while(i <= heap->heap_size){
+		printf("%p with size %ld\n", heap->heap[i], ((rm_header_ptr) heap->heap[i])->size);
 		i++;
 	}
 }
 
-// min heap that stores the free memory address in order
-void insert_heap(rm_header_ptr free_mem){
-	int i = ++(free_heap->heap_size); 
+// min heap that stores the memory address in order
+rm_header_ptr insert_heap(rm_header_ptr free_mem, HeapHeader * heap){
+	int i = ++(heap->heap_size); 
 
 	// while it's not root node and parent has greater value,
-	while((i != 1) && (free_mem < free_heap->heap[i/2])){
+	while((i != 1) && (free_mem < heap->heap[i/2])){
 		// switch parent value with child's value
-		free_heap->heap[i] = free_heap->heap[i/2];
+		heap->heap[i] = heap->heap[i/2];
 
 		i /= 2;
 	}
-	free_heap->heap[i] = free_mem;
+	heap->heap[i] = free_mem;
 
-	print_heap();
+	print_heap(heap);
 }
 // Pop min_value
-rm_header_ptr pop_min_heap(){
+rm_header_ptr pop_min_heap(HeapHeader * heap){
 	int parent, child;
 	rm_header_ptr item, temp;
 
 	// Nothing in the heap
-	if(free_heap->heap_size <= 0){
+	if(heap->heap_size <= 0){
 		printf("Nothing in the heap\n");
 		return 0x0;
 	}
-	item = free_heap->heap[1]; // 루트 노드 값을 반환하기 위해 item에 할당
-	temp = free_heap->heap[(free_heap->heap_size)--]; // 마지막 노드를 temp에 할당하고 힙 크기를 하나 감소
+	item = heap->heap[1]; // 루트 노드 값을 반환하기 위해 item에 할당
+	temp = heap->heap[(heap->heap_size)--]; // 마지막 노드를 temp에 할당하고 힙 크기를 하나 감소
 	
 	// initial value
 	parent = 1;
 	child = 2;
 
 	// Heapify
-	while(child <= free_heap->heap_size){
+	while(child <= heap->heap_size){
 
 		// find smallest node among a parent and two children (루트 노드의 왼쪽 자식 노드(index: 2)부터 비교 시작)
-		if( (child < free_heap->heap_size) && ((free_heap->heap[child]) < free_heap->heap[child+1]) ){
+		if( (child < heap->heap_size) && ((heap->heap[child]) < heap->heap[child+1]) ){
 		child++;
 		}
 		// 더 큰 자식 노드보다 마지막 노드가 크면, while문 중지
-		if( temp <= free_heap->heap[child] ){
+		if( temp <= heap->heap[child] ){
 		break;
 		}
 
 		// 더 큰 자식 노드보다 마지막 노드가 작으면, 부모 노드와 더 큰 자식 노드를 교환
-		free_heap->heap[parent] = free_heap->heap[child];
+		heap->heap[parent] = heap->heap[child];
 		// 한 단계 아래로 이동
 		parent = child;
 		child *= 2;
 	}
 
 	// 마지막 노드를 재구성한 위치에 삽입
-	free_heap->heap[parent] = temp;
+	heap->heap[parent] = temp;
 	// 최댓값(루트 노드 값)을 반환
 	return item;
 }
@@ -145,16 +144,19 @@ retain_more_memory (size_t size)
 	n_pages = (sizeof(rm_header) + size ) / pagesize  + 1 ;
 	hole = (rm_header_ptr) mmap(0x0, pagesize *n_pages, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
 
+
 	printf("pagesize : %ld\n", n_pages * pagesize);
 	
 	if (hole == 0x0)
 		return 0x0 ;
 
 		
+	// Remember the min page addr
+	page_min_bound = hole;
 	// if it's the top most page
 	if(rm_free_list.next == 0x0){
-		// Remember the page_boundary(lowest it can get)
-		page_boundary = (void *)hole + n_pages * pagesize;
+		// Remember the page_max_bound(lowest it can get)
+		page_max_bound = (void *)hole + n_pages * pagesize;
 	}
 
 
@@ -288,7 +290,7 @@ void * rrealloc (void * p, size_t s)
 				
 				// Assume that pages grow up && doesn't randomly drop down.
 				// If the expected address exceeds the loweset page boundary, ignore it
-				if(p_new_data > page_boundary) {
+				if(p_new_data > page_max_bound) {
 					printf("execeedede page boundart\n");
 					continue;
 				}
@@ -328,19 +330,19 @@ void * rrealloc (void * p, size_t s)
 
 void rmshrink () 
 {
+	// 1. combine free nodes that are next to each other
 	rm_header_ptr smallest = 0x0;
-	// O(N^2) maybe???
+
 	// sort the free memories so that free_list is in order 
 	for(rm_header_ptr iter = rm_free_list.next; iter != 0x0 ; iter = iter->next){
 		printf("printing heap\n");
-		insert_heap(iter);
+		insert_heap(iter, free_heap);
 	}
 	
 	rm_header_ptr smaller, bigger;
 	
-	
-	smaller = pop_min_heap();
-	bigger = pop_min_heap();
+	smaller = pop_min_heap(free_heap);
+	bigger = pop_min_heap(free_heap);
 
 	if(smallest == 0x0)
 		smallest = smaller;
@@ -348,29 +350,58 @@ void rmshrink ()
 	while(smaller != 0x0 && bigger != 0x0){
 		// shrinkable
 		printf("smaller : %p, bigger : %p\n", smaller, bigger);
-		printf("%p, %p \n", (void *)smaller + smaller->size + sizeof(smaller), (void *)bigger);
-		if((void *)smaller + smaller->size + sizeof(smaller) == (void *)bigger){
+		printf("%p, %p, %p \n", (void *)smaller, (void *)smaller + smaller->size, (void *)smaller + smaller->size + sizeof(rm_header));
+		
+		if((void*)smaller + smaller->size + sizeof(rm_header) == (void *)bigger){
 			printf("Shrinkable :%p \n", bigger);
 		
 			// resize the small one
-			smaller->size = bigger->size + sizeof(bigger);
+			smaller->size = smaller->size + bigger->size + sizeof(rm_header);
 
 			// free the bigger one
 			find_delete_node(bigger);
 
 			// push in heap again
-			insert_heap(smaller);
+			insert_heap(smaller, free_heap);
 		}
 		smaller = bigger;
-		bigger = pop_min_heap();
+		bigger = pop_min_heap(free_heap);
 	}
 
+
+	// 2. munmap pages thare are not used
 	// must unmap
+	// sort the used memories so that uesed_list is in order 
+	for(rm_header_ptr iter = rm_used_list.next; iter != 0x0 ; iter = iter->next){
+		insert_heap(iter, used_heap);
+	}
+
+	smaller = pop_min_heap(used_heap);
+	bigger = pop_min_heap(used_heap);
+
+	wh
 
 
 
 }
 
+void test(){
+	size_t pagesize = sysconf(_SC_PAGE_SIZE);
+	rm_header_ptr hole = (rm_header_ptr) mmap(0x0, pagesize * 2, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+	hole->next = 0x0;
+	hole->size = 10;
+	
+	printf("access on munmap on %ld\n", (hole+pagesize)->size);
+	printf("access on not munmap on %ld\n", hole->size);
+	if(munmap(hole, pagesize) == -1){
+		perror("munmap error\n");
+	}
+	printf("munmap done %p\n", hole);
+	
+	printf("access on munmap on %ld\n", (hole+pagesize)->size);
+	printf("access on not munmap on %ld\n", hole->size);
+
+}
 void rmconfig (rm_option opt) 
 {
 }
